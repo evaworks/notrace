@@ -117,6 +117,19 @@ get_log_search_dirs() {
 /var/log/mongodb
 /var/log/mongod
 /var/log/redis
+/var/log/cockroach
+/var/log/cassandra
+/var/log/elasticsearch
+/var/log/influxdb
+/var/log/clickhouse-server
+/var/log/clickhouse
+/var/log/neo4j
+/var/log/couchdb
+/var/log/rethinkdb
+/var/opt/mssql/log
+/var/log/hbase
+/var/log/hadoop
+/var/log/zookeeper
 /var/log/dnsmasq
 /var/log/unbound
 /var/log/named
@@ -370,7 +383,12 @@ self_clean() {
         # DB logs
         for dir in /var/log/mysql /var/log/mariadb /var/log/postgresql \
                    /var/log/postgres /var/log/pgsql /var/log/mongodb \
-                   /var/log/mongod /var/log/redis; do
+                   /var/log/mongod /var/log/redis /var/log/cockroach \
+                   /var/log/cassandra /var/log/elasticsearch /var/log/influxdb \
+                   /var/log/clickhouse-server /var/log/clickhouse \
+                   /var/log/neo4j /var/log/couchdb /var/log/rethinkdb \
+                   /var/opt/mssql/log /var/log/hbase /var/log/hadoop \
+                   /var/log/zookeeper; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
@@ -608,10 +626,12 @@ total_wipe() {
                /var/log/openvpn /var/log/wireguard /var/log/strongswan /var/log/ipsec \
                /var/log/ocserv /var/log/audit /var/log/apt /var/log/zypp \
                /var/log/mysql /var/log/mariadb /var/log/postgresql \
-               /var/log/mongodb /var/log/redis /var/log/dnsmasq /var/log/unbound \
-               /var/log/named /var/log/squid /var/log/haproxy /var/log/dhcp \
-               /var/log/radius /var/log/freeradius /var/log/samba \
-               /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm; do
+               /var/log/mongodb /var/log/redis /var/log/cockroach /var/log/cassandra \
+               /var/log/elasticsearch /var/log/influxdb /var/log/clickhouse-server \
+               /var/log/neo4j /var/log/couchdb /var/opt/mssql/log \
+               /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/squid \
+               /var/log/haproxy /var/log/dhcp /var/log/radius /var/log/freeradius \
+               /var/log/samba /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm; do
         if [ -d "$dir" ]; then
             find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
         fi
