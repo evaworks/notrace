@@ -1,15 +1,15 @@
 # notrace — Server Trace Cleaner
 
-清除服务器上的访问痕迹。单脚本，双模式。
+单脚本，兼容 POSIX sh，支持所有主流 Linux 发行版。
 
 ## 快速使用
 
 ```bash
-# 模式一：只清除你自己的访问记录（默认）
-curl -fsSL https://raw.githubusercontent.com/你的用户名/notrace/main/notrace.sh | sudo bash
+# 清除你自己的访问记录（默认模式）
+curl -fsSL https://raw.githubusercontent.com/evaworks/notrace/main/notrace.sh | sudo sh
 
-# 模式二：全盘无痕（清除所有记录 + 阻断源头）
-curl -fsSL https://raw.githubusercontent.com/你的用户名/notrace/main/notrace.sh | sudo bash -s -- --all
+# 全盘无痕（清除所有 + 阻断源头）
+curl -fsSL https://raw.githubusercontent.com/evaworks/notrace/main/notrace.sh | sudo sh -s -- --all
 ```
 
 ## 参数
@@ -20,25 +20,40 @@ curl -fsSL https://raw.githubusercontent.com/你的用户名/notrace/main/notrac
 | `--all` | 全盘清除：所有日志 + 安装记录 + 历史 + 造伪 + 阻断源头 |
 | `--help` | 帮助信息 |
 
-## --self 模式做什么
+## 兼容性
 
-- 自动获取你的 SSH 来源 IP
-- 从 auth.log/secure、nginx/apache、OpenVPN/WireGuard 等日志中删除含你 IP 的行
-- 过滤 wtmp/btmp/lastlog 中你的登录记录
-- 清空你的 bash history 及应用操作历史
-- 其他人的记录**完整保留**
+| 发行版 | 状态 |
+|--------|------|
+| Ubuntu / Debian / Kali / Mint / Pop | 完整支持 |
+| CentOS / RHEL / Rocky / Alma / Fedora | 完整支持 |
+| Arch / Manjaro / EndeavourOS | 完整支持 |
+| openSUSE / SLES | 完整支持 |
+| Alpine Linux | 完整支持 (ash, busybox) |
+| Gentoo / Funtoo | 完整支持 |
+| Void Linux | 完整支持 |
+| Slackware | 基础支持 |
 
-## --all 模式做什么
+## 覆盖的日志类型
 
-- 清空所有系统日志（syslog、auth、nginx、apache、VPN、docker、journald、audit 等）
-- 删除包管理器安装记录（apt、yum、dnf、pacman、zypper）
-- 清空所有用户的历史记录（bash、mysql、python、vim 等）
-- 时间戳造伪（日志文件看起来像被正常 logrotate 轮转过的）
-- 阻止未来产生记录（SSH LogLevel QUIET、rsyslog 过滤、HISTSIZE=0）
+**系统:** auth.log / secure / syslog / messages / kern.log / debug / dmesg / boot.log / lastlog / wtmp / btmp / faillog / journald
+
+**Web:** Nginx / Apache / Caddy / Traefik / h2o
+
+**VPN:** OpenVPN / WireGuard / StrongSwan / IPSec / ocserv (OpenConnect)
+
+**数据库:** MySQL / MariaDB / PostgreSQL / MongoDB / Redis
+
+**文件共享:** Samba / FTP (vsftpd / proftpd / pure-ftpd)
+
+**云厂商:** Alibaba Cloud / AWS / Azure / GCP / Tencent Cloud / Oracle Cloud
+
+**包管理器:** APT / dpkg / YUM / DNF / Pacman / Zypper / APK (Alpine) / Portage (Gentoo)
+
+**容器:** Docker (all container logs)
 
 ## 不做什么
 
-- ❌ 不卸载任何软件
-- ❌ 不停止/禁用任何服务
-- ❌ 不删除程序配置文件
-- ❌ 不影响业务运行
+- 不卸载任何软件
+- 不停止/禁用任何服务
+- 不删除程序配置文件
+- 不影响业务运行
