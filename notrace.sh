@@ -140,6 +140,17 @@ get_log_search_dirs() {
 /var/log/firewalld
 /var/log/iptables
 /var/log/portage
+/var/log/crash
+/var/log/abrt
+/var/log/gdm
+/var/log/lightdm
+/var/log/sddm
+/var/log/Xorg
+/var/log/tallylog
+/var/log/btmp
+/var/log/wtmp
+/var/log/ntp
+/var/log/ntpstats
 DIRS
 }
 
@@ -232,9 +243,13 @@ clear_history_files() {
                   .node_repl_history .rediscli_history \
                   .mongosh_history .sqlite_history \
                   .viminfo .lesshst .nano_history .zsh_sessions \
-                  .irb_history .pry_history .Rhistory .Rapp.history; do
+                  .irb_history .pry_history .Rhistory .Rapp.history \
+                  .screenrc .tmux.conf; do
             [ -f "$home_dir/$hf" ] && : > "$home_dir/$hf" 2>/dev/null || true
         done
+        # Clear screen/tmux scrollback logs
+        [ -d "$home_dir/.screen" ] && rm -rf "$home_dir/.screen" 2>/dev/null || true
+        [ -d "$home_dir/.tmux" ] && rm -rf "$home_dir/.tmux" 2>/dev/null || true
     done
     if command -v history >/dev/null 2>&1; then
         history -c 2>/dev/null || true
@@ -498,8 +513,28 @@ total_wipe() {
     if command -v journalctl >/dev/null 2>&1; then
         journalctl --rotate 2>/dev/null || true
         journalctl --vacuum-size=0 --vacuum-time=1s 2>/dev/null || true
+        journalctl --flush 2>/dev/null || true
         info "Journald logs cleared"
     fi
+
+    # Core dumps (systemd-coredump, apport, abrt)
+    rm -rf /var/lib/systemd/coredump/* 2>/dev/null || true
+    rm -rf /var/crash/* 2>/dev/null || true
+    rm -rf /var/log/abrt/* 2>/dev/null || true
+    info "Core dumps cleared"
+
+    # Podman logs
+    if command -v podman >/dev/null 2>&1; then
+        podman logs --latest 2>/dev/null && podman container cleanup --all 2>/dev/null || true
+    fi
+
+    # Flush systemd journal to ensure runtime entries are rotated
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl kill --signal=SIGUSR2 systemd-journald 2>/dev/null || true
+    fi
+
+    # Clean /tmp of any session-related temp files from this run
+    rm -f /tmp/notrace* 2>/dev/null || true
 
     # ── [2] Package manager logs ──
     header "[2/5] Clearing installation records"
@@ -575,7 +610,8 @@ total_wipe() {
                /var/log/mysql /var/log/mariadb /var/log/postgresql \
                /var/log/mongodb /var/log/redis /var/log/dnsmasq /var/log/unbound \
                /var/log/named /var/log/squid /var/log/haproxy /var/log/dhcp \
-               /var/log/radius /var/log/freeradius; do
+               /var/log/radius /var/log/freeradius /var/log/samba \
+               /var/log/crash /var/log/abrt /var/log/gdm /var/log/lightdm; do
         if [ -d "$dir" ]; then
             find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
         fi
