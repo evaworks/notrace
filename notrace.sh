@@ -100,6 +100,10 @@ get_log_search_dirs() {
 /var/log/strongswan
 /var/log/ipsec
 /var/log/ocserv
+/var/log/pptpd
+/var/log/l2tpd
+/var/log/xl2tpd
+/var/log/softether
 /var/log/vsftpd
 /var/log/proftpd
 /var/log/samba
@@ -111,6 +115,17 @@ get_log_search_dirs() {
 /var/log/mongodb
 /var/log/mongod
 /var/log/redis
+/var/log/dnsmasq
+/var/log/unbound
+/var/log/named
+/var/log/pdns
+/var/log/squid
+/var/log/tinyproxy
+/var/log/haproxy
+/var/log/mitmproxy
+/var/log/dhcp
+/var/log/radius
+/var/log/freeradius
 /var/log/fail2ban
 /var/log/audit
 /var/log/aliyun
@@ -273,7 +288,8 @@ self_clean() {
 
         # VPN logs
         for dir in /var/log/openvpn /var/log/wireguard /var/log/strongswan \
-                   /var/log/ipsec /var/log/ocserv; do
+                   /var/log/ipsec /var/log/ocserv /var/log/pptpd \
+                   /var/log/l2tpd /var/log/xl2tpd /var/log/softether; do
             if [ -d "$dir" ]; then
                 for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
             fi
@@ -320,6 +336,46 @@ self_clean() {
             fi
         done
         info "Database logs cleaned"
+
+        # DNS logs (reveal which domains were accessed via VPN)
+        for dir in /var/log/dnsmasq /var/log/unbound /var/log/named /var/log/pdns; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        [ -f /var/log/dnsmasq.log ] && remove_ip_lines /var/log/dnsmasq.log "$MY_IP"
+        info "DNS logs cleaned"
+
+        # Proxy logs (reveal URLs/content accessed via VPN)
+        for dir in /var/log/squid /var/log/tinyproxy /var/log/haproxy /var/log/mitmproxy; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "Proxy logs cleaned"
+
+        # DHCP lease logs
+        for dir in /var/log/dhcp /var/log/dhcpd; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        [ -f /var/log/dhcpd.log ] && remove_ip_lines /var/log/dhcpd.log "$MY_IP"
+
+        # RADIUS auth/accounting logs
+        for dir in /var/log/radius /var/log/freeradius; do
+            if [ -d "$dir" ]; then
+                for f in "$dir"/*; do [ -f "$f" ] && remove_ip_lines "$f" "$MY_IP"; done
+            fi
+        done
+        info "DHCP/RADIUS logs cleaned"
+
+        # Raw packet capture files
+        for f in /var/log/*.pcap /var/log/*.pcapng /var/log/*.cap /root/*.pcap \
+                 /root/*.pcapng /root/*.cap; do
+            [ -f "$f" ] && shred_file "$f"
+        done
+        info "Packet capture files removed"
 
         # Cloud agent logs
         for f in /var/log/aliyun* /var/log/aws* /var/log/amazon/* /var/log/waagent.log \
@@ -384,6 +440,17 @@ total_wipe() {
     # Also search for any .log files in /var/log that might be custom apps
     find /var/log -maxdepth 2 -type f -name "*.log" 2>/dev/null | while read -r f; do
         truncate_file "$f"
+    done
+
+    # DHCP lease files
+    for f in /var/lib/dhcp/dhcpd.leases /var/lib/dhcp/dhcpd.leases~ \
+             /var/lib/dhcp/*.leases /var/db/dhcpd.leases; do
+        [ -f "$f" ] && truncate_file "$f"
+    done
+
+    # Raw packet capture files in common locations
+    find /var/log /root /tmp -maxdepth 3 -type f \( -name "*.pcap" -o -name "*.pcapng" -o -name "*.cap" \) 2>/dev/null | while read -r f; do
+        shred_file "$f"
     done
     info "System logs cleared"
 
@@ -469,9 +536,12 @@ total_wipe() {
     rm -f /tmp/.notrace_test 2>/dev/null || true
 
     for dir in /var/log /var/log/nginx /var/log/httpd /var/log/apache2 /var/log/apache \
-               /var/log/openvpn /var/log/wireguard /var/log/audit /var/log/apt \
-               /var/log/zypp /var/log/mysql /var/log/mariadb /var/log/postgresql \
-               /var/log/mongodb /var/log/redis; do
+               /var/log/openvpn /var/log/wireguard /var/log/strongswan /var/log/ipsec \
+               /var/log/ocserv /var/log/audit /var/log/apt /var/log/zypp \
+               /var/log/mysql /var/log/mariadb /var/log/postgresql \
+               /var/log/mongodb /var/log/redis /var/log/dnsmasq /var/log/unbound \
+               /var/log/named /var/log/squid /var/log/haproxy /var/log/dhcp \
+               /var/log/radius /var/log/freeradius; do
         if [ -d "$dir" ]; then
             find "$dir" -type f -exec $touch_cmd {} \; 2>/dev/null || true
         fi
